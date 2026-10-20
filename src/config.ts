@@ -61,11 +61,25 @@ export const config = {
     );
   },
   get redisUrl() {
-    return optional("UPSTASH_REDIS_REST_URL") || required("KV_REST_API_URL");
+    return findEnv(["UPSTASH_REDIS_REST_URL", "KV_REST_API_URL"]);
   },
   get redisToken() {
-    return (
-      optional("UPSTASH_REDIS_REST_TOKEN") || required("KV_REST_API_TOKEN")
-    );
+    return findEnv(["UPSTASH_REDIS_REST_TOKEN", "KV_REST_API_TOKEN"]);
   },
 };
+
+/**
+ * Vercel's Upstash integration may add a custom prefix (e.g. STORAGE_KV_REST_API_URL),
+ * so accept the exact names first, then any variable that ends with one of them.
+ */
+function findEnv(names: string[]): string {
+  for (const n of names) {
+    const v = process.env[n]?.trim();
+    if (v) return v;
+  }
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value?.trim() && names.some((n) => key.endsWith(`_${n}`)))
+      return value.trim();
+  }
+  throw new Error(`Missing environment variable: ${names.join(" or ")}`);
+}
