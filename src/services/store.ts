@@ -5,10 +5,9 @@ import { randomId } from "./crypto.js";
 import { isoDate } from "./dates.js";
 
 /**
- * Small key-value store (Upstash Redis, free tier). It holds ONLY:
- * - which Google sheet belongs to which Telegram user, and that user's Google token (encrypted)
- * - short-lived things: sign-in links, unconfirmed entries, daily AI counters, the people list
- * The money data itself lives only in each user's own Google Sheet.
+ * Small key-value store (Upstash Redis, free tier) for bot bookkeeping:
+ * who has started the bot, unconfirmed entries, daily AI counters, the people list.
+ * The money movements themselves are in ledger.ts (encrypted).
  */
 let redis: Redis | null = null;
 function db() {
@@ -18,9 +17,7 @@ function db() {
 
 export interface UserRecord {
   telegramId: number;
-  spreadsheetId: string;
-  refreshTokenEnc: string;
-  connectedAt: string;
+  joinedAt: string;
 }
 
 const DAY = 60 * 60 * 24;
@@ -40,33 +37,6 @@ export async function deleteUser(telegramId: number): Promise<void> {
     `last:${telegramId}`,
     `ai:${telegramId}:${isoDate()}`,
   );
-}
-
-/** Remembers the sheet id even after disconnecting, so reconnecting can reuse the same sheet. */
-export async function rememberSheet(telegramId: number, spreadsheetId: string) {
-  await db().set(`sheet:${telegramId}`, spreadsheetId);
-}
-export async function previousSheet(
-  telegramId: number,
-): Promise<string | null> {
-  return (await db().get<string>(`sheet:${telegramId}`)) ?? null;
-}
-
-export interface OAuthState {
-  telegramId: number;
-  chatId: number;
-  name: string;
-}
-
-export async function createOAuthState(state: OAuthState): Promise<string> {
-  const id = randomId(18);
-  await db().set(`oauth:${id}`, state, { ex: 15 * 60 });
-  return id;
-}
-
-/** One-time use: reading the state also deletes it. */
-export async function takeOAuthState(id: string): Promise<OAuthState | null> {
-  return (await db().getdel<OAuthState>(`oauth:${id}`)) ?? null;
 }
 
 export interface Pending {

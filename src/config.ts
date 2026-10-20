@@ -27,17 +27,7 @@ export const config = {
   get geminiModel() {
     return optional("GEMINI_MODEL", "gemini-flash-latest");
   },
-  get googleClientId() {
-    return required("GOOGLE_CLIENT_ID");
-  },
-  get googleClientSecret() {
-    return required("GOOGLE_CLIENT_SECRET");
-  },
-  /** Public address of the deployment, e.g. https://my-cashflow-bot.vercel.app */
-  get appUrl() {
-    return required("APP_URL").replace(/\/+$/, "");
-  },
-  /** 32 random bytes, base64. Used to encrypt each user's Google token at rest. */
+  /** 32 random bytes, base64. Used to encrypt every saved entry. */
   get encryptionKey() {
     return required("ENCRYPTION_KEY");
   },

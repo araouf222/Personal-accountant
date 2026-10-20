@@ -26,7 +26,7 @@ await bot.telegram.setWebhook(`${url}/api/webhook`, {
 });
 await bot.telegram.setMyCommands(COMMANDS);
 await bot.telegram.setMyDescription(
-  "سجل الفلوس اللي بتدخلك واللي بتصرفها بالكلام أو بصورة الفاتورة، في شيت جوجل خاص بيك.",
+  "سجل الفلوس اللي بتدخلك واللي بتصرفها بالكلام أو بصورة الفاتورة، وآخر الشهر اعرف حساباتك.",
 );
 console.log("✅ Webhook set to", `${url}/api/webhook`);
 console.log("ℹ️ ", await bot.telegram.getWebhookInfo());

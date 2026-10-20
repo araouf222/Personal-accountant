@@ -21,11 +21,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
     await bot.telegram.setMyCommands(COMMANDS);
     await bot.telegram.setMyDescription(
-      "سجل الفلوس اللي بتدخلك واللي بتصرفها بالكلام أو بصورة الفاتورة، في شيت جوجل خاص بيك.",
+      "سجل الفلوس اللي بتدخلك واللي بتصرفها بالكلام أو بصورة الفاتورة، وآخر الشهر اعرف حساباتك.",
     );
-    await bot.telegram.setMyShortDescription(
-      "دفتر وارد ومنصرف في شيت جوجل خاص بيك 💰",
-    );
+    await bot.telegram.setMyShortDescription("دفتر وارد ومنصرف خاص بيك 💰");
     const info = await bot.telegram.getWebhookInfo();
     res
       .status(200)

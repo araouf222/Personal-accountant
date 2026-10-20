@@ -12,26 +12,23 @@
 </head>
 <body>
 <h1>سياسة الخصوصية</h1>
-<p>البوت بيساعدك تسجل الفلوس اللي بتدخلك واللي بتصرفها في شيت جوجل خاص بيك.</p>
+<p>البوت بيساعدك تسجل الفلوس اللي بتدخلك واللي بتصرفها، وتعرف حساباتك كل شهر.</p>
 
 <h2>بنحفظ إيه</h2>
 <ul>
-  <li><b>حساباتك نفسها</b> (المبالغ والبيانات والأسماء) بتتحفظ في شيت جوجل في الـ Drive بتاعك أنت، مش عندنا.</li>
-  <li>عندنا بنحفظ بس: رقم حسابك على تليجرام، رقم الشيت، ومفتاح الوصول لحساب جوجل (مشفّر)، وقائمة الأسماء اللي سجلتها علشان البوت يفهمها.</li>
+  <li>الحركات اللي بتسجلها (المبلغ، البيان، التصنيف، الاسم، التاريخ)، ومعاها رقم حسابك على تليجرام.</li>
+  <li>كل حركة بتتحفظ <b>متشفّرة</b>، ومحدش غيرك يقدر يشوف حساباتك من خلال البوت.</li>
 </ul>
 
-<h2>صلاحيات جوجل</h2>
-<p>البوت بيطلب صلاحية <code>drive.file</code> بس، ودي بتسمحله يشوف ويعدل الملفات اللي هو عملها. ما يقدرش يشوف أو يقرا أي ملف تاني في الـ Drive بتاعك.</p>
-
 <h2>قراءة الرسايل والفواتير</h2>
-<p>الرسايل وصور الفواتير بتتبعت لخدمة Google Gemini علشان تتقرا ويطلع منها المبلغ والبند. ما بنحتفظش بالصور ولا بالرسايل بعد ما تتسجل.</p>
+<p>الرسايل وصور الفواتير بتتبعت لخدمة Google Gemini علشان تتقرا ويطلع منها المبلغ والبند. ما بنحتفظش بالصور ولا بنص الرسالة نفسه.</p>
 
 <h2>المسح</h2>
-<p>اكتب <code>/disconnect</code> في البوت وهنمسح مفتاح الوصول وبياناتك من عندنا. الشيت بيفضل في الـ Drive بتاعك وتقدر تمسحه بنفسك. وتقدر كمان تلغي صلاحية البوت من <a href="https://myaccount.google.com/permissions">صفحة الأذونات في حساب جوجل</a>.</p>
+<p>اكتب <code>/export</code> لو عاوز نسخة Excel، وبعدين <code>/deleteall</code> وهيتمسح كل حاجة تخصك من البوت نهائياً.</p>
 
 <div class="en">
 <h2>Privacy Policy (English)</h2>
-<p>Your financial records are stored only in a Google Sheet in your own Google Drive. The bot uses the <code>drive.file</code> scope, so it can access only files it created. We store your Telegram ID, your sheet ID, an encrypted Google refresh token, and the list of person names you used. Messages and receipt images are sent to Google Gemini to extract amounts and are not retained by us. Send <code>/disconnect</code> to revoke access and delete our records; you can also revoke access at myaccount.google.com/permissions. Google user data is used only to provide this feature and is not sold, shared, or used for advertising.</p>
+<p>We store the entries you record (amount, description, category, person name, date) with your Telegram ID, encrypted at rest. Messages and receipt images are sent to Google Gemini to extract amounts and are not retained. Send <code>/export</code> for an Excel copy and <code>/deleteall</code> to permanently delete all your data. Your data is not sold or shared.</p>
 </div>
 </body>
 </html>

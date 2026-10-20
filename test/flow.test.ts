@@ -1,13 +1,10 @@
 /**
- * End-to-end wiring test: real bot handlers, with Telegram, Redis, Google and Gemini faked.
+ * End-to-end wiring test: real bot handlers, with Telegram, Redis and Gemini faked.
  */
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { AiResult, Transaction } from "../src/schemas/transaction.js";
 
 process.env.ENCRYPTION_KEY = Buffer.alloc(32, 1).toString("base64");
-process.env.APP_URL = "https://example.vercel.app";
-process.env.GOOGLE_CLIENT_ID = "cid";
-process.env.GOOGLE_CLIENT_SECRET = "secret";
 
 // ---- fake store
 const kv = new Map<string, unknown>();
@@ -17,10 +14,6 @@ mock.module("../src/services/store.js", () => ({
   saveUser: async (u: { telegramId: number }) =>
     void kv.set(`user:${u.telegramId}`, u),
   deleteUser: async (id: number) => void kv.delete(`user:${id}`),
-  rememberSheet: async () => {},
-  previousSheet: async () => null,
-  createOAuthState: async () => "state123",
-  takeOAuthState: async () => null,
   savePending: async (p: unknown) => {
     kv.set("pending:P1", p);
     return "P1";
@@ -35,18 +28,20 @@ mock.module("../src/services/store.js", () => ({
   useAiQuota: async () => ++aiCount <= 100,
 }));
 
-// ---- fake sheet
+// ---- fake ledger
 let sheet: Transaction[] = [];
 mock.module("../src/services/ledger.js", () => ({
-  appendTransactions: async (_c: unknown, _id: string, txs: Transaction[]) =>
+  appendTransactions: async (_id: number, txs: Transaction[]) =>
     void sheet.push(...txs),
   readTransactions: async () => sheet,
-  deleteByIds: async (_c: unknown, _id: string, ids: string[]) => {
+  deleteByIds: async (_id: number, ids: string[]) => {
     const before = sheet.length;
     sheet = sheet.filter((t) => !ids.includes(t.id));
     return before - sheet.length;
   },
-  sheetUrl: (id: string) => `https://docs.google.com/spreadsheets/d/${id}`,
+  deleteAll: async () => {
+    sheet = [];
+  },
 }));
 
 // ---- fake Gemini
@@ -55,7 +50,6 @@ mock.module("../src/services/ai.js", () => ({ interpret: async () => nextAi }));
 
 const { bot } = await import("../src/bot.js");
 const { Telegram } = await import("telegraf");
-const { encrypt } = await import("../src/services/crypto.js");
 
 // ---- fake Telegram API: capture what the bot sends
 const sent: { method: string; payload: Record<string, unknown> }[] = [];
@@ -135,21 +129,13 @@ beforeEach(() => {
 });
 
 describe("bot flow", () => {
-  test("new user is asked to connect Google", async () => {
+  test("new user is welcomed and registered, no sign-in needed", async () => {
     await bot.handleUpdate(textUpdate("/start") as never);
-    expect(lastText()).toContain("اضغط الزرار");
-    const markup = JSON.stringify(sent.at(-1)?.payload.reply_markup);
-    expect(markup).toContain("accounts.google.com");
-    expect(markup).toContain("drive.file");
+    expect(lastText()).toContain("أهلاً بيك");
+    expect(kv.has("user:42")).toBe(true);
   });
 
-  test("connected user records two people in one message", async () => {
-    kv.set("user:42", {
-      telegramId: 42,
-      spreadsheetId: "SHEET",
-      refreshTokenEnc: encrypt("rt"),
-      connectedAt: "2026-10-20",
-    });
+  test("user records two people in one message", async () => {
     nextAi = {
       intent: "transaction",
       transactions: [
@@ -234,6 +220,13 @@ describe("bot flow", () => {
   test("/export sends an Excel file", async () => {
     await bot.handleUpdate(textUpdate("/export") as never);
     expect(sent.some((s) => s.method === "sendDocument")).toBe(true);
+  });
+
+  test("/deleteall asks, then wipes everything", async () => {
+    await bot.handleUpdate(textUpdate("/deleteall") as never);
+    expect(lastText()).toContain("متأكد");
+    await bot.handleUpdate(buttonUpdate("del:yes") as never);
+    expect(sheet).toHaveLength(0);
   });
 
   test("group chats are ignored", async () => {

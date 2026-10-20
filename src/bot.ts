@@ -18,12 +18,11 @@ import {
   timestamp,
 } from "./services/dates.js";
 import { monthWorkbook } from "./services/excel.js";
-import { authUrl, clientFor, isAuthGone, revoke } from "./services/google.js";
 import {
   appendTransactions,
+  deleteAll,
   deleteByIds,
   readTransactions,
-  sheetUrl,
 } from "./services/ledger.js";
 import {
   esc,
@@ -61,9 +60,8 @@ export const HELP = `<b>إزاي تستخدمني</b>
 /cashflow – الوارد والمنصرف والرصيد (ممكن تكتب بعده شهر: <code>/cashflow سبتمبر</code>)
 /person – فلوس شخص معين: <code>/person مروة</code>
 /export – ملف Excel للشهر
-/sheet – لينك الشيت بتاعك
 /undo – امسح آخر حاجة اتسجلت
-/disconnect – افصل حساب جوجل`;
+/deleteall – امسح كل حساباتك من البوت`;
 
 // ---------------------------------------------------------------- guards
 
@@ -78,76 +76,28 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
-async function connectPrompt(ctx: Context, intro: string) {
-  if (!ctx.from || !ctx.chat) return;
-  const state = await store.createOAuthState({
-    telegramId: ctx.from.id,
-    chatId: ctx.chat.id,
-    name: ctx.from.first_name ?? "",
-  });
-  await ctx.reply(
-    `${intro}\n\nاضغط الزرار، ادخل بحساب جوجل بتاعك ووافق. هعملك شيت "كاش فلو" في الـ Drive بتاعك، وأنا مش هقدر أشوف أي ملف تاني غيره.\n\n(اللينك صالح ربع ساعة)`,
-    Markup.inlineKeyboard([
-      Markup.button.url("🔗 اربط حساب جوجل", authUrl(state)),
-    ]),
-  );
-}
-
+/** Every user gets their own private ledger automatically on first use. */
 async function requireUser(ctx: Context): Promise<UserRecord | null> {
   if (!ctx.from) return null;
-  const user = await store.getUser(ctx.from.id);
-  if (!user) {
-    await connectPrompt(
-      ctx,
-      "أهلاً! 👋 قبل ما نبدأ محتاج تربط حساب جوجل علشان أسجل حساباتك في شيت خاص بيك.",
-    );
-    return null;
-  }
+  const existing = await store.getUser(ctx.from.id);
+  if (existing) return existing;
+  const user = { telegramId: ctx.from.id, joinedAt: isoDate() };
+  await store.saveUser(user);
   return user;
-}
-
-/** Runs sheet work; if Google access is gone, asks the user to reconnect. */
-async function withSheet<T>(
-  ctx: Context,
-  user: UserRecord,
-  work: (client: ReturnType<typeof clientFor>) => Promise<T>,
-): Promise<T | undefined> {
-  try {
-    return await work(clientFor(user.refreshTokenEnc));
-  } catch (error) {
-    if (isAuthGone(error)) {
-      await store.rememberSheet(user.telegramId, user.spreadsheetId);
-      await store.deleteUser(user.telegramId);
-      await connectPrompt(
-        ctx,
-        "⚠️ صلاحية الوصول لحساب جوجل انتهت أو اتلغت. اربط الحساب تاني وهكمل على نفس الشيت.",
-      );
-      return undefined;
-    }
-    throw error;
-  }
 }
 
 // ---------------------------------------------------------------- commands
 
 bot.start(async (ctx) => {
-  const user = await store.getUser(ctx.from.id);
-  if (!user) {
-    await connectPrompt(
-      ctx,
-      "أهلاً بيك في بوت الكاش فلو 💰\nسجل الفلوس اللي بتدخلك واللي بتصرفها بالكلام أو بصورة الفاتورة، وآخر الشهر تعرف حساباتك شكلها إيه.",
-    );
-    return;
-  }
-  await ctx.reply(`أهلاً تاني 👋\n\n${HELP}`, HTML);
+  const isNew = !(await store.getUser(ctx.from.id));
+  await requireUser(ctx);
+  const intro = isNew
+    ? "أهلاً بيك في بوت الكاش فلو 💰\nسجل الفلوس اللي بتدخلك واللي بتصرفها بالكلام أو بصورة الفاتورة، وآخر الشهر تعرف حساباتك شكلها إيه.\nحساباتك خاصة بيك لوحدك ومتشفّرة 🔒"
+    : "أهلاً تاني 👋";
+  await ctx.reply(`${intro}\n\n${HELP}`, HTML);
 });
 
 bot.help((ctx) => ctx.reply(HELP, HTML));
-
-bot.command("sheet", async (ctx) => {
-  const user = await requireUser(ctx);
-  if (user) await ctx.reply(`📄 الشيت بتاعك:\n${sheetUrl(user.spreadsheetId)}`);
-});
 
 bot.command("cashflow", async (ctx) => {
   const user = await requireUser(ctx);
@@ -184,9 +134,7 @@ bot.command("export", async (ctx) => {
   const month = parseMonthArg(ctx.payload);
   if (!month) return ctx.reply("مش فاهم الشهر ده. جرب مثلاً: /export سبتمبر");
   await ctx.sendChatAction("upload_document");
-  const txs = await withSheet(ctx, user, (c) =>
-    readTransactions(c, user.spreadsheetId),
-  );
+  const txs = await readTransactions(user.telegramId);
   if (!txs) return;
   const currency = config.defaultCurrency;
   const file = await monthWorkbook(
@@ -208,15 +156,18 @@ bot.command("undo", async (ctx) => {
   await undoIds(ctx, user, ids);
 });
 
-bot.command("disconnect", async (ctx) => {
+bot.command("deleteall", async (ctx) => {
   const user = await requireUser(ctx);
   if (!user) return;
   await ctx.reply(
-    "متأكد إنك عاوز تفصل حساب جوجل؟\nالشيت هيفضل عندك في الـ Drive زي ما هو، بس البوت مش هيقدر يسجل فيه لحد ما تربط تاني.",
-    Markup.inlineKeyboard([
-      Markup.button.callback("أيوه افصل", "disc:yes"),
-      Markup.button.callback("لأ", "disc:no"),
-    ]),
+    "⚠️ متأكد إنك عاوز تمسح <b>كل</b> حساباتك من البوت؟ مش هينفع ترجعها.\nلو عاوز نسخة الأول اكتب /export.",
+    {
+      ...HTML,
+      ...Markup.inlineKeyboard([
+        Markup.button.callback("أيوه امسح كله", "del:yes"),
+        Markup.button.callback("لأ", "del:no"),
+      ]),
+    },
   );
 });
 
@@ -408,7 +359,7 @@ async function saveAndConfirm(
   user: UserRecord,
   txs: Transaction[],
 ) {
-  const saved = await withSheet(ctx, user, async (client) => {
+  const saved = await (async () => {
     // Skip receipts already recorded (same printed invoice number).
     const receipts = txs
       .map((t) => t.description.match(/\[#(.+)\]$/)?.[0])
@@ -416,7 +367,7 @@ async function saveAndConfirm(
     let toSave = txs;
     let skipped = 0;
     if (receipts.length) {
-      const existing = await readTransactions(client, user.spreadsheetId);
+      const existing = await readTransactions(user.telegramId);
       toSave = txs.filter((t) => {
         const tag = t.description.match(/\[#(.+)\]$/)?.[0];
         const dup = tag && existing.some((e) => e.description.endsWith(tag));
@@ -424,11 +375,9 @@ async function saveAndConfirm(
         return !dup;
       });
     }
-    if (toSave.length)
-      await appendTransactions(client, user.spreadsheetId, toSave);
+    if (toSave.length) await appendTransactions(user.telegramId, toSave);
     return { toSave, skipped };
-  });
-  if (!saved) return;
+  })();
 
   const { toSave, skipped } = saved;
   if (!toSave.length) {
@@ -460,9 +409,7 @@ async function saveAndConfirm(
 
 async function undoIds(ctx: Context, user: UserRecord, ids: string[]) {
   if (!ids.length) return ctx.reply("مفيش حاجة أتراجع عنها.");
-  const removed = await withSheet(ctx, user, (c) =>
-    deleteByIds(c, user.spreadsheetId, ids),
-  );
+  const removed = await deleteByIds(user.telegramId, ids);
   if (removed === undefined) return;
   await ctx.reply(
     removed
@@ -475,9 +422,7 @@ async function undoIds(ctx: Context, user: UserRecord, ids: string[]) {
 
 async function sendMonth(ctx: Context, user: UserRecord, month: string) {
   await ctx.sendChatAction("typing");
-  const txs = await withSheet(ctx, user, (c) =>
-    readTransactions(c, user.spreadsheetId),
-  );
+  const txs = await readTransactions(user.telegramId);
   if (!txs) return;
   await ctx.reply(formatMonth(summarizeMonth(txs, month)), {
     ...HTML,
@@ -494,9 +439,7 @@ async function sendPerson(
   month: string,
 ) {
   await ctx.sendChatAction("typing");
-  const txs = await withSheet(ctx, user, (c) =>
-    readTransactions(c, user.spreadsheetId),
-  );
+  const txs = await readTransactions(user.telegramId);
   if (!txs) return;
   await ctx.reply(formatPerson(personReport(txs, name, month)), HTML);
 }
@@ -540,9 +483,7 @@ bot.action(/^x:(\d{4}-\d{2})$/, async (ctx) => {
   const user = await requireUser(ctx);
   if (!user) return;
   const month = ctx.match[1];
-  const txs = await withSheet(ctx, user, (c) =>
-    readTransactions(c, user.spreadsheetId),
-  );
+  const txs = await readTransactions(user.telegramId);
   if (!txs) return;
   const file = await monthWorkbook(
     month,
@@ -556,21 +497,17 @@ bot.action(/^x:(\d{4}-\d{2})$/, async (ctx) => {
   });
 });
 
-bot.action("disc:no", async (ctx) => {
+bot.action("del:no", async (ctx) => {
   await ctx.answerCbQuery();
-  await ctx.editMessageText("تمام، مفيش حاجة اتغيرت 👍");
+  await ctx.editMessageText("تمام، مفيش حاجة اتمسحت 👍");
 });
 
-bot.action("disc:yes", async (ctx) => {
+bot.action("del:yes", async (ctx) => {
   await ctx.answerCbQuery();
-  const user = await store.getUser(ctx.from.id);
-  if (user) {
-    await revoke(user.refreshTokenEnc);
-    await store.rememberSheet(user.telegramId, user.spreadsheetId);
-    await store.deleteUser(user.telegramId);
-  }
+  await deleteAll(ctx.from.id);
+  await store.deleteUser(ctx.from.id);
   await ctx.editMessageText(
-    "اتفصل ✅ الشيت لسه في الـ Drive بتاعك. لو حبيت ترجع اكتب /start.",
+    "اتمسح كل حاجة ✅ لو حبيت تبدأ من جديد اكتب /start.",
   );
 });
 
@@ -593,8 +530,7 @@ export const COMMANDS = [
   { command: "cashflow", description: "الوارد والمنصرف والرصيد" },
   { command: "person", description: "فلوس شخص معين" },
   { command: "export", description: "ملف Excel للشهر" },
-  { command: "sheet", description: "لينك الشيت بتاعك" },
   { command: "undo", description: "امسح آخر تسجيل" },
   { command: "help", description: "إزاي تستخدم البوت" },
-  { command: "disconnect", description: "افصل حساب جوجل" },
+  { command: "deleteall", description: "امسح كل حساباتك" },
 ];

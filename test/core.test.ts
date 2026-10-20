@@ -13,7 +13,6 @@ import {
   shiftMonth,
   westernDigits,
 } from "../src/services/dates.js";
-import { fromRow, monthlyFormulas, toRow } from "../src/services/ledger.js";
 import {
   formatMonth,
   formatPerson,
@@ -121,11 +120,6 @@ describe("turning AI output into rows", () => {
     expect(t.category).toBe("فلوس لشخص");
     expect(t.description).toBe("فلوس [#INV-77]");
   });
-  test("sheet row round trip", () => {
-    const t = toTransaction(base, "in", NOW);
-    const back = fromRow(toRow(t));
-    expect(back).toEqual(t);
-  });
 });
 
 describe("reports", () => {
@@ -192,14 +186,5 @@ describe("reports", () => {
       "2026-10",
     );
     expect(formatPerson(r)).toContain("&lt;b&gt;x");
-  });
-});
-
-describe("sheet formulas", () => {
-  test("monthly summary formulas reference the right columns", () => {
-    const f = monthlyFormulas("EGP");
-    expect(f.row2[1]).toContain("'الحركات'!D2:D");
-    expect(f.row2[1]).toContain('"وارد"');
-    expect(f.row2[2]).toContain('"منصرف"');
   });
 });
